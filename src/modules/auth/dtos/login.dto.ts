@@ -19,6 +19,9 @@ export class UserDto {
 
   @ApiProperty()
   fullName: string;
+
+  @ApiProperty()
+  isOnboarded: boolean;
 }
 
 export class LoginResponseDto {

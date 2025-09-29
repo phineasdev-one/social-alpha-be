@@ -7,6 +7,9 @@ import {
   HttpStatus,
   Body,
   Get,
+  Put,
+  Patch,
+  Req,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -23,6 +26,7 @@ import { LocalAuthGuard } from './guard/local-auth.guard';
 import { LoginDto, LoginResponseDto } from './dtos/login.dto';
 import { RegisterDto } from './dtos/register.dto';
 import { PrivateRoute } from './auth.decorator';
+import { OnboardDto } from './dtos/onboard.dto';
 
 @ApiTags('v1/auth')
 @Controller('v1/auth')
@@ -72,5 +76,19 @@ export class AuthController {
   })
   async getMyProfile(@Request() req) {
     return this.authService.getProfile(req.user.email);
+  }
+
+  @Patch('/onboard')
+  @ApiBearerAuth()
+  @PrivateRoute()
+  @ApiOperation({ summary: 'Update user info during onboarding' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'User successfully onboarded',
+  })
+  async onboard(@Req() req, @Body() onboardDto: OnboardDto) {
+    const userId = req.user.id;
+    const user = await this.authService.onboardUser(userId, onboardDto);
+    return user;
   }
 }

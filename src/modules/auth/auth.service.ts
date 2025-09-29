@@ -1,4 +1,9 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
@@ -6,6 +11,7 @@ import { User, UserDocument } from '../users/schemas/user.schema';
 import { RegisterDto } from './dtos/register.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { OnboardDto } from './dtos/onboard.dto';
 
 @Injectable()
 export class AuthService {
@@ -22,6 +28,7 @@ export class AuthService {
       user: {
         email: user.email,
         fullName: user.fullName,
+        isOnboarded: user.isOnboarded,
       },
       accessToken: this.jwtService.sign(payload),
     };
@@ -64,5 +71,22 @@ export class AuthService {
 
   async getProfile(email: string) {
     return this.userModel.findOne({ email }).select('-password');
+  }
+
+  async onboardUser(userId: string, onboardDto: OnboardDto) {
+    const updatedUser = await this.userModel.findByIdAndUpdate(
+      userId,
+      {
+        ...onboardDto,
+        isOnboarded: true,
+      },
+      { new: true },
+    );
+
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    return updatedUser;
   }
 }
