@@ -12,15 +12,15 @@ export class UsersService {
     return createdUser.save();
   }
 
-  async findAll(): Promise<User[]> {
+  async findAll() {
     return this.userModel.find().exec();
   }
 
-  async findByEmail(email: string): Promise<User | null> {
+  async findByEmail(email: string) {
     return this.userModel.findOne({ email }).exec();
   }
 
-  async findOne(id: string): Promise<User | null> {
+  async findOne(id: string) {
     return this.userModel.findById(id).exec();
   }
 }

@@ -70,7 +70,7 @@ export class AuthService {
   }
 
   async getProfile(email: string) {
-    return this.userModel.findOne({ email }).select('-password');
+    const userProfile = this.userModel.findOne({ email }).select('-password');
   }
 
   async onboardUser(userId: string, onboardDto: OnboardDto) {

@@ -14,7 +14,6 @@ import { FriendRequestModule } from './modules/friend-request/friend-request.mod
     UsersModule,
     DatabaseModule,
     FriendRequestModule,
-    FriendRequestModule,
     MongooseModule.forRoot(process.env.MONGO_URI),
   ],
   controllers: [AppController],

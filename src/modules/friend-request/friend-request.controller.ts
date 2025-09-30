@@ -1,34 +1,65 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Get, Post, Param, Req, Controller } from '@nestjs/common';
 import { FriendRequestService } from './friend-request.service';
-import { CreateFriendRequestDto } from './dto/create-friend-request.dto';
-import { UpdateFriendRequestDto } from './dto/update-friend-request.dto';
+import { PrivateRoute } from '../auth/auth.decorator';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 
-@Controller('friend-request')
+@PrivateRoute()
+@ApiBearerAuth()
+@ApiTags('friend-requests')
+@Controller('v1/friend-requests')
 export class FriendRequestController {
-  constructor(private readonly friendRequestService: FriendRequestService) {}
+  constructor(private readonly friendRequestsService: FriendRequestService) {}
 
-  @Post()
-  create(@Body() createFriendRequestDto: CreateFriendRequestDto) {
-    return this.friendRequestService.create(createFriendRequestDto);
+  @Get('recommended')
+  @ApiOperation({ summary: 'Get recommended users (not friends yet)' })
+  @ApiResponse({ status: 200, description: 'List of recommended users' })
+  async getRecommendedUsers(@Req() req) {
+    const userId = req.user.id;
+    return this.friendRequestsService.getRecommendedUsers(userId);
   }
 
-  @Get()
-  findAll() {
-    return this.friendRequestService.findAll();
+  @Get('me')
+  @ApiOperation({ summary: 'Get my friends list' })
+  @ApiResponse({ status: 200, description: 'List of friends' })
+  async getMyFriends(@Req() req) {
+    const userId = req.user.id;
+    return this.friendRequestsService.getMyFriends(userId);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.friendRequestService.findOne(+id);
+  @Post('send/:id')
+  @ApiOperation({ summary: 'Send a friend request' })
+  @ApiResponse({ status: 201, description: 'Friend request created' })
+  async sendFriendRequest(@Req() req, @Param('id') recipientId: string) {
+    const userId = req.user.id;
+    return this.friendRequestsService.sendFriendRequest(userId, recipientId);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateFriendRequestDto: UpdateFriendRequestDto) {
-    return this.friendRequestService.update(+id, updateFriendRequestDto);
+  @Post('accept/:id')
+  @ApiOperation({ summary: 'Accept a friend request' })
+  @ApiResponse({ status: 200, description: 'Friend request accepted' })
+  async acceptFriendRequest(@Req() req, @Param('id') requestId: string) {
+    const userId = req.user.id;
+    return this.friendRequestsService.acceptFriendRequest(userId, requestId);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.friendRequestService.remove(+id);
+  @Get('incoming')
+  @ApiOperation({ summary: 'Get incoming friend requests' })
+  @ApiResponse({ status: 200, description: 'List of incoming requests' })
+  async getFriendRequests(@Req() req) {
+    const userId = req.user.id;
+    return this.friendRequestsService.getFriendRequests(userId);
+  }
+
+  @Get('outgoing')
+  @ApiOperation({ summary: 'Get outgoing (sent) friend requests' })
+  @ApiResponse({ status: 200, description: 'List of outgoing requests' })
+  async getOutgoingFriendReqs(@Req() req) {
+    const userId = req.user.id;
+    return this.friendRequestsService.getOutgoingFriendReqs(userId);
   }
 }
