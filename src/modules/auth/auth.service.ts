@@ -69,8 +69,10 @@ export class AuthService {
     return createdUser.save();
   }
 
-  async getProfile(email: string) {
-    const userProfile = this.userModel.findOne({ email }).select('-password');
+  async getProfile(userId: string) {
+    const userProfile = this.userModel.findById(userId).select('-password');
+
+    return userProfile;
   }
 
   async onboardUser(userId: string, onboardDto: OnboardDto) {

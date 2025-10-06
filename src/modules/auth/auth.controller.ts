@@ -75,7 +75,7 @@ export class AuthController {
     description: 'Return current logged in user profile',
   })
   async getMyProfile(@Request() req) {
-    return this.authService.getProfile(req.user.email);
+    return this.authService.getProfile(req.user.id);
   }
 
   @Patch('/onboard')
