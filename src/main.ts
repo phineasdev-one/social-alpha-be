@@ -3,10 +3,31 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { json, urlencoded } from 'express';
-import { createClient } from 'redis';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
-import { RedisIoAdapter } from './modules/gateway/redis.adapter';
+import { createClient } from 'redis';
+
+class RedisIoAdapter extends IoAdapter {
+  private adapterConstructor: ReturnType<typeof createAdapter>;
+
+  async connectToRedis() {
+    const url = process.env.REDIS_URL || 'redis://localhost:6379';
+    const pubClient = createClient({ url });
+    const subClient = pubClient.duplicate();
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    this.adapterConstructor = createAdapter(pubClient, subClient);
+  }
+
+  createIOServer(port: number, options?: any) {
+    const server = super.createIOServer(port, options);
+    if (this.adapterConstructor) {
+      server.adapter(this.adapterConstructor);
+    } else {
+      console.warn('Redis adapter not initialized');
+    }
+    return server;
+  }
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
