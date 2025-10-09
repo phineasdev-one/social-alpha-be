@@ -4,6 +4,8 @@ import { Document, Types } from 'mongoose';
 export type MessageDocument = Message &
   Document & {
     _id: Types.ObjectId;
+    createdAt: Date;
+    updatedAt: Date;
   };
 
 @Schema({ timestamps: true })

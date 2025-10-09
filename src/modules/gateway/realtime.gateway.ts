@@ -3,6 +3,7 @@ import {
   WebSocketServer,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { RedisService } from '../redis/redis.service';
@@ -13,7 +14,7 @@ import { JwtService } from '@nestjs/jwt';
   cors: { origin: '*' },
 })
 export class RealtimeGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
+  implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit
 {
   @WebSocketServer() server: Server;
 
@@ -22,14 +23,15 @@ export class RealtimeGateway
     private readonly jwtService: JwtService,
   ) {}
 
+  /** Khởi tạo gateway: subscribe Redis channel */
   async afterInit() {
-    await this.redisService.subscribe(
-      'chat:message',
-      async (payloadStr: string) => {
+    try {
+      await this.redisService.subscribe('chat:message', async payloadStr => {
         try {
           const payload = JSON.parse(payloadStr);
           const { receiverId, conversationId, message } = payload;
 
+          // Gửi đến socket của user nếu đang online
           const socketId = await this.redisService.getSocket(receiverId);
           if (socketId) {
             this.server
@@ -37,6 +39,7 @@ export class RealtimeGateway
               .emit('receive_message', { conversationId, message });
           }
 
+          // Gửi đến tất cả user join room conversation
           if (conversationId) {
             this.server
               .to(conversationId)
@@ -45,16 +48,19 @@ export class RealtimeGateway
         } catch (err) {
           console.error('Failed to handle chat:message payload', err);
         }
-      },
-    );
+      });
+      console.log('✅ RealtimeGateway initialized and subscribed to Redis');
+    } catch (err) {
+      console.error('❌ Failed to subscribe Redis channel', err);
+    }
   }
 
+  /** Khi client connect */
   async handleConnection(client: Socket) {
     try {
-      // Expect JWT token in handshake.auth.token or handshake.query.token
       const token =
-        (client.handshake?.auth && client.handshake.auth.token) ||
-        client.handshake?.query?.token;
+        (client.handshake?.auth?.token as string) ||
+        (client.handshake?.query?.token as string);
 
       if (!token) {
         client.emit('error', 'No token provided');
@@ -62,15 +68,12 @@ export class RealtimeGateway
         return;
       }
 
-      // remove Bearer if present
-      const raw = token.toString().replace(/^Bearer\s+/i, '');
+      const raw = token.replace(/^Bearer\s+/i, '');
       const payload = this.jwtService.verify(raw, {
         secret: process.env.JWT_SECRET,
       });
 
-      // Support payload.sub or payload.userId or payload.id
-      const userId = (payload &&
-        (payload.sub || payload.userId || payload.id)) as string;
+      const userId = payload?.sub || payload?.userId || payload?.id;
       if (!userId) {
         client.emit('error', 'Invalid token payload');
         client.disconnect();
@@ -79,13 +82,13 @@ export class RealtimeGateway
 
       client.data.userId = userId;
 
-      // store mapping in Redis so any instance can find socketId
+      // Lưu socketId vào Redis
       await this.redisService.setSocket(userId, client.id);
 
-      // optionally join user to personal room by id
+      // Join personal room
       client.join(userId);
 
-      console.log(`Socket connected: user=${userId} socket=${client.id}`);
+      console.log(`Socket connected: user=${userId}, socket=${client.id}`);
     } catch (err) {
       console.log('Socket auth error', err?.message || err);
       client.emit('error', 'Authentication failed');
@@ -93,12 +96,25 @@ export class RealtimeGateway
     }
   }
 
+  /** Khi client disconnect */
   async handleDisconnect(client: Socket) {
-    const uid = client.data?.userId;
-    if (uid) {
-      await this.redisService.delSocket(uid);
-      client.leave(uid);
-      console.log(`Socket disconnected: user=${uid} socket=${client.id}`);
+    const userId = client.data?.userId;
+    if (userId) {
+      await this.redisService.delSocket(userId);
+      client.leave(userId);
+      console.log(`Socket disconnected: user=${userId}, socket=${client.id}`);
     }
+  }
+
+  /** Helper: publish message vào Redis */
+  async publishMessage(
+    receiverId: string,
+    conversationId: string,
+    message: any,
+  ) {
+    await this.redisService.publish(
+      'chat:message',
+      JSON.stringify({ receiverId, conversationId, message }),
+    );
   }
 }

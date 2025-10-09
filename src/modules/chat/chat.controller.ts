@@ -1,48 +1,49 @@
-import { Controller, Post, Body, Get, Param, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ChatService } from './chat.service';
-import { CreateMessageDto } from './dtos/create-message.dto';
-import { PrivateRoute } from '../auth/auth.decorator'; // bác đã có
+import { MarkAsReadDto, SendMessageDto } from './dtos/chat.dto';
+import { PrivateRoute } from '../auth/auth.decorator';
 
+@ApiTags('Chat')
 @PrivateRoute()
 @Controller('chat')
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
-  // send message (via HTTP)
-  @Post('message')
-  async sendMessage(@Req() req, @Body() dto: CreateMessageDto) {
-    const senderId = req.user?.id || req.user?._id || req.user?.sub;
-    const message = await this.chatService.sendMessage(
-      senderId,
+  @Post('send')
+  @ApiOperation({ summary: 'Gửi tin nhắn giữa hai người dùng' })
+  @ApiBody({ type: SendMessageDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Tin nhắn đã được gửi và lưu vào DB',
+  })
+  async sendMessage(@Body() dto: SendMessageDto) {
+    return this.chatService.sendMessage(
+      dto.senderId,
       dto.receiverId,
       dto.content,
-      dto.conversationId,
     );
-    return { success: true, message };
   }
 
-  // list conversations for logged user
-  @Get('conversations')
-  async getConversations(@Req() req) {
-    const userId = req.user?.id || req.user?._id || req.user?.sub;
-    const conv = await this.chatService.getConversations(userId);
-    return { success: true, conversations: conv };
+  @Get(':conversationId/messages')
+  @ApiOperation({ summary: 'Lấy danh sách tin nhắn trong 1 cuộc hội thoại' })
+  async getMessages(@Param('conversationId') conversationId: string) {
+    return this.chatService.getMessages(conversationId);
   }
 
-  // get messages in a conversation
-  @Get('conversation/:id/messages')
-  async getMessages(
-    @Param('id') conversationId: string,
-    @Query('limit') limit = '50',
-    @Query('before') before?: string,
+  @Get('conversations/:userId')
+  @ApiOperation({ summary: 'Lấy tất cả cuộc hội thoại của 1 user' })
+  async getConversations(@Param('userId') userId: string) {
+    return this.chatService.getUserConversations(userId);
+  }
+
+  @Post(':conversationId/read')
+  @ApiOperation({ summary: 'Đánh dấu tin nhắn trong cuộc hội thoại đã đọc' })
+  @ApiBody({ type: MarkAsReadDto })
+  async markAsRead(
+    @Param('conversationId') conversationId: string,
+    @Body() dto: MarkAsReadDto,
   ) {
-    const lim = parseInt(limit, 10) || 50;
-    const beforeDate = before ? new Date(before) : undefined;
-    const messages = await this.chatService.getMessages(
-      conversationId,
-      lim,
-      beforeDate,
-    );
-    return { success: true, messages };
+    return this.chatService.markAsRead(conversationId, dto.userId);
   }
 }

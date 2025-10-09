@@ -3,15 +3,10 @@ import { RealtimeGateway } from './realtime.gateway';
 import { RedisModule } from '../redis/redis.module';
 import { RedisService } from '../redis/redis.service';
 import { JwtModule } from '@nestjs/jwt';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [
-    RedisModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'secret',
-      signOptions: { expiresIn: '7d' },
-    }),
-  ],
+  imports: [RedisModule, AuthModule],
   providers: [RealtimeGateway, RedisService],
   exports: [RealtimeGateway],
 })

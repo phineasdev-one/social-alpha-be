@@ -1,8 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
-export type ConversationDocument = Conversation & Document;
-
 @Schema({ timestamps: true })
 export class Conversation {
   @Prop({ type: [Types.ObjectId], ref: 'User', required: true })
@@ -13,7 +11,11 @@ export class Conversation {
 
   @Prop({ type: Object, default: {} })
   unreadCounts: Record<string, number>;
+
+  _id?: Types.ObjectId;
 }
+
+export type ConversationDocument = Conversation & Document;
 
 export const ConversationSchema = SchemaFactory.createForClass(Conversation);
 ConversationSchema.index({ participants: 1 });

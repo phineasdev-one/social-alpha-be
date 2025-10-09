@@ -2,10 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Message, MessageDocument } from './schemas/message.schema';
-import {
-  Conversation,
-  ConversationDocument,
-} from './schemas/conversation.schema';
+import { Conversation } from './schemas/conversation.schema';
 import { RedisService } from '../redis/redis.service';
 
 @Injectable()
@@ -13,136 +10,97 @@ export class ChatService {
   constructor(
     @InjectModel(Message.name)
     private readonly messageModel: Model<MessageDocument>,
+
     @InjectModel(Conversation.name)
-    private readonly conversationModel: Model<ConversationDocument>,
+    private readonly conversationModel: Model<Conversation>,
+
     private readonly redisService: RedisService,
   ) {}
 
-  /**
-   * Find or create a conversation between two users
-   */
-  async findOrCreateConversation(
-    userAId: string,
-    userBId: string,
-  ): Promise<ConversationDocument> {
-    const userA = new Types.ObjectId(userAId);
-    const userB = new Types.ObjectId(userBId);
-
+  async sendMessage(senderId: string, receiverId: string, content: string) {
     let conversation = await this.conversationModel.findOne({
-      participants: { $all: [userA, userB] },
+      participants: { $all: [senderId, receiverId] },
     });
 
     if (!conversation) {
-      const unreadCounts: Record<string, number> = {
-        [userAId]: 0,
-        [userBId]: 0,
-      };
-
       conversation = new this.conversationModel({
-        participants: [userA, userB],
-        unreadCounts,
+        participants: [senderId, receiverId],
+        unreadCounts: { [senderId]: 0, [receiverId]: 0 },
       });
-
       await conversation.save();
     }
 
-    return conversation;
-  }
-
-  /**
-   * Send a message between users, update conversation & publish event
-   */
-  async sendMessage(
-    senderId: string,
-    receiverId: string,
-    content: string,
-    conversationId?: string,
-  ) {
-    // 1️⃣ Find or create conversation
-    const conversation = conversationId
-      ? await this.conversationModel.findById(conversationId)
-      : await this.findOrCreateConversation(senderId, receiverId);
-
-    if (!conversation) {
-      throw new NotFoundException('Conversation not found');
-    }
-
-    // 2️⃣ Create message
     const message = await this.messageModel.create({
-      sender: new Types.ObjectId(senderId),
-      receiver: new Types.ObjectId(receiverId),
+      sender: senderId,
+      receiver: receiverId,
       conversation: conversation._id,
       content,
     });
 
-    await message.populate([
-      { path: 'sender', select: 'fullName profilePic' },
-      { path: 'receiver', select: 'fullName profilePic' },
-    ]);
+    // Cache vào Redis
+    const redisClient = this.redisService.getClient();
+    const convKey = `chat:conv:${conversation._id}:messages`;
+    await redisClient.lPush(convKey, JSON.stringify(message));
+    await redisClient.lTrim(convKey, 0, 49); // giữ tối đa 50 tin
+    await redisClient.expire(convKey, 600); // 10 phút TTL
 
-    // 3️⃣ Update conversation info
-    conversation.lastMessage = message._id;
+    // Update unread cache
+    await redisClient.hIncrBy(
+      `chat:user:${receiverId}:unread`,
+      conversation._id.toString(),
+      1,
+    );
 
-    const unreadCounts =
-      conversation.unreadCounts instanceof Map
-        ? Object.fromEntries(conversation.unreadCounts.entries())
-        : conversation.unreadCounts || {};
+    // Publish event để gateway gửi socket real-time
+    await this.redisService.publish(
+      'channel:message:new',
+      JSON.stringify({
+        conversationId: conversation._id,
+        senderId,
+        receiverId,
+        content,
+        createdAt: message.createdAt,
+      }),
+    );
 
-    unreadCounts[receiverId] = (unreadCounts[receiverId] || 0) + 1;
+    // Update Mongo lastMessage
+    await this.conversationModel.findByIdAndUpdate(conversation._id, {
+      lastMessage: message._id,
+    });
 
-    conversation.unreadCounts = unreadCounts;
-    await conversation.save();
-
-    // 4️⃣ Publish to Redis
-    const payload = {
-      conversationId: conversation._id.toString(),
-      receiverId,
-      message: message.toObject(),
-    };
-
-    await this.redisService.publish('chat:message', JSON.stringify(payload));
-
-    return {
-      success: true,
-      message,
-      conversationId: conversation._id.toString(),
-    };
+    return message;
   }
 
-  /**
-   * Get all conversations of a user
-   */
-  async getConversations(userId: string) {
+  async getMessages(conversationId: string) {
+    return this.messageModel
+      .find({ conversation: conversationId })
+      .sort({ createdAt: 1 })
+      .populate('sender', '_id name')
+      .populate('receiver', '_id name');
+  }
+
+  async getUserConversations(userId: string) {
     return this.conversationModel
       .find({ participants: userId })
-      .populate({
-        path: 'lastMessage',
-        populate: [
-          { path: 'sender', select: 'fullName profilePic' },
-          { path: 'receiver', select: 'fullName profilePic' },
-        ],
-      })
-      .sort({ updatedAt: -1 })
-      .lean()
-      .exec();
+      .populate('lastMessage')
+      .sort({ updatedAt: -1 });
   }
 
   /**
-   * Get messages in a conversation
+   * Đánh dấu đã đọc tin nhắn
    */
-  async getMessages(conversationId: string, limit = 50, before?: Date) {
-    const filter: Record<string, any> = { conversation: conversationId };
-    if (before) filter.createdAt = { $lt: before };
+  async markAsRead(conversationId: string, userId: string) {
+    const conversation = await this.conversationModel.findById(conversationId);
+    if (!conversation) throw new NotFoundException('Conversation not found');
 
-    const messages = await this.messageModel
-      .find(filter)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .populate('sender', 'fullName profilePic')
-      .populate('receiver', 'fullName profilePic')
-      .lean()
-      .exec();
+    await this.messageModel.updateMany(
+      { conversation: conversationId, receiver: userId, isRead: false },
+      { $set: { isRead: true } },
+    );
 
-    return messages.reverse();
+    conversation.unreadCounts[userId] = 0;
+    await conversation.save();
+
+    return { success: true };
   }
 }
