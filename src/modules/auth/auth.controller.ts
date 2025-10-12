@@ -27,8 +27,9 @@ import { LoginDto, LoginResponseDto } from './dtos/login.dto';
 import { RegisterDto } from './dtos/register.dto';
 import { PrivateRoute } from './auth.decorator';
 import { OnboardDto } from './dtos/onboard.dto';
-import { TGenericResponse } from '@/common/types/generic-response';
-import { User } from '../users/schemas/user.schema';
+import { TGenericOK, TGenericResponse } from '@/common/types/generic-response';
+import { User, UserDocument } from '../users/schemas/user.schema';
+import { AuthUser } from '@/common/decorators/auth-user.decorator';
 
 @ApiTags('v1/auth')
 @Controller('v1/auth')
@@ -76,8 +77,11 @@ export class AuthController {
     status: HttpStatus.OK,
     description: 'Return current logged in user profile',
   })
-  async getMyProfile(@Request() req): Promise<TGenericResponse<User>> {
-    return this.authService.getProfile(req.user.id);
+  async getMyProfile(
+    @AuthUser() user: UserDocument,
+  ): Promise<TGenericOK<Partial<User>>> {
+    console.log('first', user);
+    return this.authService.getProfile(user.id);
   }
 
   @Patch('/onboard')
@@ -88,8 +92,11 @@ export class AuthController {
     status: HttpStatus.OK,
     description: 'User successfully onboarded',
   })
-  async onboard(@Req() req, @Body() onboardDto: OnboardDto) {
-    const userId = req.user.id;
+  async onboard(
+    @AuthUser() authUser: UserDocument,
+    @Body() onboardDto: OnboardDto,
+  ) {
+    const userId = authUser.id;
     const user = await this.authService.onboardUser(userId, onboardDto);
     return user;
   }

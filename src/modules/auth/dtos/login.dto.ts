@@ -27,7 +27,4 @@ export class UserDto {
 export class LoginResponseDto {
   @ApiProperty({ type: UserDto })
   user: UserDto;
-
-  @ApiProperty()
-  accessToken: string;
 }

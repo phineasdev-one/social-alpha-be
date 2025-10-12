@@ -28,16 +28,19 @@ export class AuthService {
       email: user.email,
       id: user.id,
     };
-    return CommonHelper.sendOKResponse({
-      meta: {
+    return CommonHelper.sendGenericResponse({
+      data: {
         user: {
           email: user.email,
           fullName: user.fullName,
           isOnboarded: user.isOnboarded,
           id: user._id.toString(),
         },
-        accessToken: this.jwtService.sign(payload),
       },
+      token: this.jwtService.sign(payload),
+      code: HttpStatus.OK,
+      message: 'Ok',
+      success: true,
     });
   }
 
@@ -45,7 +48,7 @@ export class AuthService {
     const customer = await this.userService.findByEmail(email);
 
     if (!customer) {
-      throw new HttpException('User not found', HttpStatus.BAD_REQUEST);
+      throw new HttpException(AuthMessage.userNotFound, HttpStatus.BAD_REQUEST);
     }
 
     const isValidPassword = await bcrypt.compare(
@@ -92,10 +95,15 @@ export class AuthService {
   }
 
   async getProfile(userId: string) {
-    const userProfile = this.userModel.findById(userId).select('-password');
+    const query = this.userModel.findById(userId).select('-password');
+    const userProfile = await query.lean<User>();
+
+    if (!userProfile) {
+      throw new NotFoundException('User not found');
+    }
 
     return CommonHelper.sendOKResponse({
-      meta: userProfile,
+      data: userProfile,
     });
   }
 
@@ -114,7 +122,7 @@ export class AuthService {
     }
 
     return CommonHelper.sendOKResponse({
-      meta: updatedUser,
+      data: updatedUser,
     });
   }
 }

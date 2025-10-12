@@ -13,9 +13,10 @@ export type TGenericError = {
   message: string;
 };
 
-export type TGenericOK<M = unknown> = {
+export type TGenericOK<T = unknown, M = unknown> = {
   success: true;
   code: number;
   message: string;
+  data?: T;
   meta?: M;
 };

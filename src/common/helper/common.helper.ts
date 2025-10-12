@@ -35,11 +35,15 @@ export default class CommonHelper {
     };
   }
 
-  static sendOKResponse({ message = 'OK' }: Partial<TGenericOK>): TGenericOK {
+  static sendOKResponse({
+    message = 'OK',
+    data,
+  }: Partial<TGenericOK>): TGenericOK {
     return {
       success: true,
       code: HttpStatus.OK,
       message,
+      data,
     };
   }
 }
