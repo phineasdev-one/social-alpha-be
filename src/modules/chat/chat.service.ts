@@ -3,7 +3,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Message, MessageDocument } from './schemas/message.schema';
 import { Conversation } from './schemas/conversation.schema';
-import { RedisService } from '../redis/redis.service';
+import { SendMessageDto } from './dtos/chat.dto';
+import { InjectHttpException } from '@/common/decorators/try-catch.decorator';
+import { ChatMessage } from '@/constant/message';
+import { NotFoundEx } from '@/exceptions/common.exception';
+import CommonHelper from '@/common/helper/common.helper';
 
 @Injectable()
 export class ChatService {
@@ -13,11 +17,11 @@ export class ChatService {
 
     @InjectModel(Conversation.name)
     private readonly conversationModel: Model<Conversation>,
-
-    private readonly redisService: RedisService,
   ) {}
 
-  async sendMessage(senderId: string, receiverId: string, content: string) {
+  @InjectHttpException('Invalid', 400)
+  async sendMessage(senderId: string, payload: SendMessageDto) {
+    const { content, receiverId, type } = payload;
     let conversation = await this.conversationModel.findOne({
       participants: { $all: [senderId, receiverId] },
     });
@@ -35,35 +39,9 @@ export class ChatService {
       receiver: receiverId,
       conversation: conversation._id,
       content,
+      type: type || 'text',
     });
 
-    // Cache vào Redis
-    const redisClient = this.redisService.getClient();
-    const convKey = `chat:conv:${conversation._id}:messages`;
-    await redisClient.lPush(convKey, JSON.stringify(message));
-    await redisClient.lTrim(convKey, 0, 49); // giữ tối đa 50 tin
-    await redisClient.expire(convKey, 600); // 10 phút TTL
-
-    // Update unread cache
-    await redisClient.hIncrBy(
-      `chat:user:${receiverId}:unread`,
-      conversation._id.toString(),
-      1,
-    );
-
-    // Publish event để gateway gửi socket real-time
-    await this.redisService.publish(
-      'channel:message:new',
-      JSON.stringify({
-        conversationId: conversation._id,
-        senderId,
-        receiverId,
-        content,
-        createdAt: message.createdAt,
-      }),
-    );
-
-    // Update Mongo lastMessage
     await this.conversationModel.findByIdAndUpdate(conversation._id, {
       lastMessage: message._id,
     });
@@ -71,6 +49,7 @@ export class ChatService {
     return message;
   }
 
+  @InjectHttpException('Invalid', 400)
   async getMessages(conversationId: string) {
     return this.messageModel
       .find({ conversation: conversationId })
@@ -79,6 +58,7 @@ export class ChatService {
       .populate('receiver', '_id name');
   }
 
+  @InjectHttpException('Invalid', 400)
   async getUserConversations(userId: string) {
     return this.conversationModel
       .find({ participants: userId })
@@ -86,12 +66,11 @@ export class ChatService {
       .sort({ updatedAt: -1 });
   }
 
-  /**
-   * Đánh dấu đã đọc tin nhắn
-   */
+  @InjectHttpException('Invalid', 400)
   async markAsRead(conversationId: string, userId: string) {
     const conversation = await this.conversationModel.findById(conversationId);
-    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    if (!conversation) throw new NotFoundEx(ChatMessage.conversationNotFound);
 
     await this.messageModel.updateMany(
       { conversation: conversationId, receiver: userId, isRead: false },
@@ -101,6 +80,6 @@ export class ChatService {
     conversation.unreadCounts[userId] = 0;
     await conversation.save();
 
-    return { success: true };
+    return CommonHelper.sendOKResponse({});
   }
 }

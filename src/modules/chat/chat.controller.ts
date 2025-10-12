@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ChatService } from './chat.service';
 import { MarkAsReadDto, SendMessageDto } from './dtos/chat.dto';
@@ -17,12 +17,9 @@ export class ChatController {
     status: 201,
     description: 'Tin nhắn đã được gửi và lưu vào DB',
   })
-  async sendMessage(@Body() dto: SendMessageDto) {
-    return this.chatService.sendMessage(
-      dto.senderId,
-      dto.receiverId,
-      dto.content,
-    );
+  async sendMessage(@Req() req, @Body() dto: SendMessageDto) {
+    const userId = req.user.id;
+    return this.chatService.sendMessage(userId, dto);
   }
 
   @Get(':conversationId/messages')

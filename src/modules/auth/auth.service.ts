@@ -12,6 +12,9 @@ import { RegisterDto } from './dtos/register.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { OnboardDto } from './dtos/onboard.dto';
+import CommonHelper from '@/common/helper/common.helper';
+import { AuthMessage } from '@/constant/message';
+import { ConflictEx, NotFoundEx } from '@/exceptions/common.exception';
 
 @Injectable()
 export class AuthService {
@@ -20,18 +23,22 @@ export class AuthService {
     private readonly userService: UsersService,
     private readonly jwtService: JwtService,
   ) {}
-  async login(user: User) {
+  async login(user: UserDocument) {
     const payload = {
       email: user.email,
+      id: user.id,
     };
-    return {
-      user: {
-        email: user.email,
-        fullName: user.fullName,
-        isOnboarded: user.isOnboarded,
+    return CommonHelper.sendOKResponse({
+      meta: {
+        user: {
+          email: user.email,
+          fullName: user.fullName,
+          isOnboarded: user.isOnboarded,
+          id: user._id.toString(),
+        },
+        accessToken: this.jwtService.sign(payload),
       },
-      accessToken: this.jwtService.sign(payload),
-    };
+    });
   }
 
   async validateUser(email: string, IncomingPassword: string) {
@@ -47,7 +54,12 @@ export class AuthService {
     );
 
     if (!isValidPassword) {
-      throw new HttpException('Invalid password', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        CommonHelper.sendGenericError({
+          message: AuthMessage.invalidPassword,
+        }),
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     delete customer.password;
@@ -55,15 +67,25 @@ export class AuthService {
   }
 
   async createUser(createUserDto: RegisterDto) {
-    const idx = Math.floor(Math.random() * 100) + 1; // generate a num between 1-100
-    const randomAvatar = `https://avatar.iran.liara.run/public/${idx}.png`;
+    const existingUser = await this.userModel.findOne({
+      email: createUserDto.email,
+    });
+
+    if (existingUser) {
+      throw new ConflictEx(AuthMessage.useAlreadyExisted);
+    }
+
     const hash = await bcrypt.hash(createUserDto.password, 10);
 
+    // Random avatar
+    const idx = Math.floor(Math.random() * 100) + 1;
+    const randomAvatar = `https://avatar.iran.liara.run/public/${idx}.png`;
+
     const createdUser = new this.userModel({
-      password: hash,
-      profilePic: randomAvatar,
       email: createUserDto.email,
+      password: hash,
       fullName: createUserDto.fullName,
+      profilePic: randomAvatar,
     });
 
     return createdUser.save();
@@ -72,7 +94,9 @@ export class AuthService {
   async getProfile(userId: string) {
     const userProfile = this.userModel.findById(userId).select('-password');
 
-    return userProfile;
+    return CommonHelper.sendOKResponse({
+      meta: userProfile,
+    });
   }
 
   async onboardUser(userId: string, onboardDto: OnboardDto) {
@@ -86,9 +110,11 @@ export class AuthService {
     );
 
     if (!updatedUser) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundEx(AuthMessage.userNotFound);
     }
 
-    return updatedUser;
+    return CommonHelper.sendOKResponse({
+      meta: updatedUser,
+    });
   }
 }

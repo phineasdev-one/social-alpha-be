@@ -7,7 +7,6 @@ import {
   Conversation,
   ConversationSchema,
 } from './schemas/conversation.schema';
-import { RedisModule } from '../redis/redis.module';
 
 @Module({
   imports: [
@@ -15,7 +14,6 @@ import { RedisModule } from '../redis/redis.module';
       { name: Message.name, schema: MessageSchema },
       { name: Conversation.name, schema: ConversationSchema },
     ]),
-    RedisModule,
   ],
   controllers: [ChatController],
   providers: [ChatService],

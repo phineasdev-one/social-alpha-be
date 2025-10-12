@@ -5,13 +5,9 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import * as dotenv from 'dotenv';
 import { AuthService } from '../auth.service';
 import { UsersService } from '@/modules/users/users.service';
+import { ValidatePayload } from '@/common/types/common';
 
 dotenv.config();
-
-type ValidatePayload = {
-  email: string;
-  id: string;
-};
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {

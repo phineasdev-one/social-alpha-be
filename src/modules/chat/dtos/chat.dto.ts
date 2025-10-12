@@ -3,27 +3,20 @@ import { IsMongoId, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class SendMessageDto {
   @ApiProperty({
-    example: '652a9c07f1d12345abcd6789',
-    description: 'Người gửi',
-  })
-  @IsMongoId()
-  senderId: string;
-
-  @ApiProperty({
     example: '652a9c07f1d12345abcd6799',
-    description: 'Người nhận',
+    description: 'Receiver ID',
   })
   @IsMongoId()
   receiverId: string;
 
-  @ApiProperty({ example: 'Hello Vy 💬', description: 'Nội dung tin nhắn' })
+  @ApiProperty({ example: 'Hello Susan', description: 'Content' })
   @IsString()
   @IsNotEmpty()
   content: string;
 
   @ApiProperty({
     example: 'text',
-    description: 'Loại tin nhắn',
+    description: 'Type of message',
     required: false,
   })
   @IsOptional()
@@ -34,7 +27,7 @@ export class SendMessageDto {
 export class MarkAsReadDto {
   @ApiProperty({
     example: '652a9c07f1d12345abcd6789',
-    description: 'Người đọc',
+    description: 'Reader',
   })
   @IsMongoId()
   userId: string;

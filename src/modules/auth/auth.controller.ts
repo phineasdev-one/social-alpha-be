@@ -27,6 +27,8 @@ import { LoginDto, LoginResponseDto } from './dtos/login.dto';
 import { RegisterDto } from './dtos/register.dto';
 import { PrivateRoute } from './auth.decorator';
 import { OnboardDto } from './dtos/onboard.dto';
+import { TGenericResponse } from '@/common/types/generic-response';
+import { User } from '../users/schemas/user.schema';
 
 @ApiTags('v1/auth')
 @Controller('v1/auth')
@@ -47,7 +49,7 @@ export class AuthController {
     status: HttpStatus.BAD_REQUEST,
     description: 'Bad request',
   })
-  async login(@Request() req): Promise<LoginResponseDto> {
+  async login(@Request() req): Promise<TGenericResponse<LoginResponseDto>> {
     return this.authService.login(req.user);
   }
 
@@ -74,7 +76,7 @@ export class AuthController {
     status: HttpStatus.OK,
     description: 'Return current logged in user profile',
   })
-  async getMyProfile(@Request() req) {
+  async getMyProfile(@Request() req): Promise<TGenericResponse<User>> {
     return this.authService.getProfile(req.user.id);
   }
 
