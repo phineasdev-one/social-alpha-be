@@ -84,9 +84,10 @@ export class AuthController {
     return this.authService.getProfile(user.id);
   }
 
-  @Patch('/onboard')
+  @Patch('/onboarding')
   @ApiBearerAuth()
   @PrivateRoute()
+  @ApiBody({ type: OnboardDto })
   @ApiOperation({ summary: 'Update user info during onboarding' })
   @ApiResponse({
     status: HttpStatus.OK,
